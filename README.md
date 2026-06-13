@@ -3,7 +3,6 @@
 A TOML parsing library for [Zap](https://github.com/thezaplang/zap), backed by
 [tomlc17](https://github.com/cktan/tomlc17) through FFI.
 
-.
 
 ## Layout
 
