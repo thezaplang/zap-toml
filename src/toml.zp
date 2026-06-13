@@ -1,27 +1,3 @@
-// toml — a TOML parsing library for Zap, backed by tomlc17 via FFI.
-//
-// The user-facing API is fully high level: method-based classes that speak in
-// Zap `String`s, with no `unsafe` or raw pointers exposed. All FFI/pointer
-// handling is confined to this module.
-//
-// Errors are reported through Zap's failable functions: parsing, lookups, and
-// typed accessors return `T!TomlError`. Use `?` to propagate, or
-// `or <fallback>` / `or err { ... }` to handle locally.
-//
-// Usage:
-//   import "toml";
-//
-//   fun load() String!toml.TomlError {
-//       var doc: toml.Document = toml.parseString("title = \"hi\"")?;
-//       var field: toml.Value = doc.root().get("title")?;
-//       var title: String = field.asString()?;
-//       doc.close();   // releases the whole parsed tree
-//       return title;
-//   }
-//
-// Link against lib/libztoml.a (see build_lib.sh). A Document owns the parsed
-// tree; every Value borrows from it and is invalid after Document.close().
-
 import "ffi";
 import "std/string" { StringView, owned };
 
