@@ -1,0 +1,41 @@
+// Low-level FFI declarations for libztoml (tomlc17 + toml_shim.c).
+//
+// Every function here maps 1:1 onto a `zt_*` symbol in toml_shim.c. Pointers
+// are opaque: `*Void` is a `toml_result_t*` or `toml_datum_t*` living in C
+// land. Prefer the high-level API in `toml.zp` over calling these directly.
+
+// parsing — return a toml_result_t* (owns the document tree)
+pub ext fun zt_parse(src: *Char, len: Int) *Void;
+pub ext fun zt_parse_file(fname: *Char) *Void;
+pub ext fun zt_ok(result: *Void) Int32;
+pub ext fun zt_errmsg(result: *Void) *Char;
+pub ext fun zt_free(result: *Void) Void;
+pub ext fun zt_root(result: *Void) *Void;
+
+// datum inspection — datum pointers point into the result tree
+pub ext fun zt_type(datum: *Void) Int32;
+pub ext fun zt_string(datum: *Void) *Char;
+pub ext fun zt_int(datum: *Void) Int64;
+pub ext fun zt_fp(datum: *Void) Float64;
+pub ext fun zt_bool(datum: *Void) Int32;
+
+// table access
+pub ext fun zt_get(table: *Void, key: *Char) *Void;
+pub ext fun zt_seek(table: *Void, path: *Char) *Void;
+pub ext fun zt_table_size(datum: *Void) Int32;
+pub ext fun zt_table_key(datum: *Void, i: Int32) *Char;
+pub ext fun zt_table_value(datum: *Void, i: Int32) *Void;
+
+// array access
+pub ext fun zt_array_size(datum: *Void) Int32;
+pub ext fun zt_array_get(datum: *Void, i: Int32) *Void;
+
+// datetime components
+pub ext fun zt_ts_year(datum: *Void) Int32;
+pub ext fun zt_ts_month(datum: *Void) Int32;
+pub ext fun zt_ts_day(datum: *Void) Int32;
+pub ext fun zt_ts_hour(datum: *Void) Int32;
+pub ext fun zt_ts_minute(datum: *Void) Int32;
+pub ext fun zt_ts_second(datum: *Void) Int32;
+pub ext fun zt_ts_usec(datum: *Void) Int32;
+pub ext fun zt_ts_tz(datum: *Void) Int32;

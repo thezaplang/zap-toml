@@ -1,0 +1,9 @@
+{
+  "name": "zap-toml",
+  "version": "0.1.0",
+  "out": "build/",
+  "entry": "src/main.zp",
+  "compiler": "zapc",
+  "optimization": "O0",
+  "flags": "--allow-unsafe -Llib -lztoml"
+}

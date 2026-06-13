@@ -1,0 +1,28 @@
+# Build output
+/build/
+
+# Generated native library (produced by build_lib.sh)
+/lib/
+
+# Compiled object / static / shared libraries
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Logs & temp
+*.log
+*.tmp

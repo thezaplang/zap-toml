@@ -1,0 +1,54 @@
+import "std/io" { println, printInt };
+import "toml";
+
+global var SRC: String =
+    "title = \"Zap TOML\"\n" +
+    "version = 1\n" +
+    "pi = 3.14\n" +
+    "enabled = true\n" +
+    "[server]\n" +
+    "host = \"localhost\"\n" +
+    "port = 8080\n" +
+    "tags = [\"a\", \"b\", \"c\"]\n";
+
+
+fun readConfig() Int!toml.TomlError {
+    var doc: toml.Document = toml.parseString(SRC)?;
+    var root: toml.Value = doc.root();
+
+    println("title:");
+    println(root.getString("title")?);
+
+    println("version:");
+    printInt(root.getInt("version")? as Int);
+
+    println("server.host:");
+    println(root.seekString("server.host")?);
+
+    println("server.port:");
+    printInt(root.seekInt("server.port")? as Int);
+
+    println("tags:");
+    var tags: toml.Value = root.seek("server.tags")?;
+    var i: Int = 0;
+    while i < tags.size() {
+        var tag: toml.Value = tags.at(i)?;
+        println(tag.asString()?);
+        i = i + 1;
+    }
+
+
+    println("timeout (default 30):");
+    printInt((root.getInt("timeout") or 30) as Int);
+
+    doc.close();
+    return 0;
+}
+
+fun main() Int {
+    return readConfig() or err {
+        println("toml error:");
+        println(err.message);
+        1
+    };
+}

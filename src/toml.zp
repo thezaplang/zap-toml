@@ -1,0 +1,302 @@
+// toml — a TOML parsing library for Zap, backed by tomlc17 via FFI.
+//
+// The user-facing API is fully high level: method-based classes that speak in
+// Zap `String`s, with no `unsafe` or raw pointers exposed. All FFI/pointer
+// handling is confined to this module.
+//
+// Errors are reported through Zap's failable functions: parsing, lookups, and
+// typed accessors return `T!TomlError`. Use `?` to propagate, or
+// `or <fallback>` / `or err { ... }` to handle locally.
+//
+// Usage:
+//   import "toml";
+//
+//   fun load() String!toml.TomlError {
+//       var doc: toml.Document = toml.parseString("title = \"hi\"")?;
+//       var field: toml.Value = doc.root().get("title")?;
+//       var title: String = field.asString()?;
+//       doc.close();   // releases the whole parsed tree
+//       return title;
+//   }
+//
+// Link against lib/libztoml.a (see build_lib.sh). A Document owns the parsed
+// tree; every Value borrows from it and is invalid after Document.close().
+
+import "ffi";
+import "std/string" { StringView, owned };
+
+ext fun strlen(s: *Char) Int;
+
+// Errors
+
+pub enum ErrorKind {
+    Parse,            // the document failed to parse
+    NotFound,         // a key or path was not present
+    WrongType,        // a value was read as the wrong kind
+    IndexOutOfRange,  // an array/table index was out of bounds
+}
+
+@error
+pub struct TomlError {
+    kind: ErrorKind,
+    message: String,
+}
+
+pub alias Kind = Int;
+pub global var UNKNOWN: Kind = 0;
+pub global var STRING: Kind = 1;
+pub global var INT: Kind = 2;
+pub global var FLOAT: Kind = 3;
+pub global var BOOL: Kind = 4;
+pub global var DATE: Kind = 5;
+pub global var TIME: Kind = 6;
+pub global var DATETIME: Kind = 7;
+pub global var DATETIMETZ: Kind = 8;
+pub global var ARRAY: Kind = 9;
+pub global var TABLE: Kind = 10;
+
+// Convert a borrowed C string into an owned Zap String.
+fun cstr(p: *Char) String {
+    if p == null {
+        return "";
+    }
+    unsafe {
+        return owned(StringView { ptr: p, len: strlen(p) });
+    }
+}
+
+// Value: a borrowed node in a parsed document
+pub class Value {
+    priv handle: *Void;
+
+    fun init(h: *Void) {
+        self.handle = h;
+    }
+
+    // The value's kind, or UNKNOWN if missing.
+    pub fun kind() Kind {
+        unsafe {
+            return ffi.zt_type(self.handle) as Int;
+        }
+    }
+
+    // True if this value was actually found (lookups that miss return UNKNOWN).
+    pub fun exists() Bool {
+        return self.kind() != UNKNOWN;
+    }
+
+    pub fun isString() Bool { return self.kind() == STRING; }
+    pub fun isInt() Bool { return self.kind() == INT; }
+    pub fun isFloat() Bool { return self.kind() == FLOAT; }
+    pub fun isBool() Bool { return self.kind() == BOOL; }
+    pub fun isArray() Bool { return self.kind() == ARRAY; }
+    pub fun isTable() Bool { return self.kind() == TABLE; }
+
+    // Scalar accessors. Fail with WrongType if the value is another kind.
+    pub fun asString() String!TomlError {
+        if !self.isString() {
+            fail TomlError { kind: ErrorKind.WrongType, message: "value is not a string" };
+        }
+        unsafe {
+            return cstr(ffi.zt_string(self.handle));
+        }
+    }
+
+    pub fun asInt() Int64!TomlError {
+        if !self.isInt() {
+            fail TomlError { kind: ErrorKind.WrongType, message: "value is not an integer" };
+        }
+        unsafe {
+            return ffi.zt_int(self.handle);
+        }
+    }
+
+    pub fun asFloat() Float64!TomlError {
+        if !self.isFloat() {
+            fail TomlError { kind: ErrorKind.WrongType, message: "value is not a float" };
+        }
+        unsafe {
+            return ffi.zt_fp(self.handle);
+        }
+    }
+
+    pub fun asBool() Bool!TomlError {
+        if !self.isBool() {
+            fail TomlError { kind: ErrorKind.WrongType, message: "value is not a boolean" };
+        }
+        unsafe {
+            var b: Int = ffi.zt_bool(self.handle) as Int;
+            return b != 0;
+        }
+    }
+
+    // Table access
+    // Look up a direct key. Fails with NotFound if the key is absent.
+    pub fun get(key: String) Value!TomlError {
+        unsafe {
+            var h: *Void = ffi.zt_get(self.handle, key as *Char);
+            if h == null {
+                fail TomlError { kind: ErrorKind.NotFound, message: "key not found: " + key };
+            }
+            return new Value(h);
+        }
+    }
+
+       pub fun seek(path: String) Value!TomlError {
+        unsafe {
+            var h: *Void = ffi.zt_seek(self.handle, path as *Char);
+            if h == null {
+                fail TomlError { kind: ErrorKind.NotFound, message: "path not found: " + path };
+            }
+            return new Value(h);
+        }
+    }
+
+    //  Typed key lookups 
+    pub fun getString(key: String) String!TomlError {
+        var v: Value = self.get(key)?;
+        return v.asString()?;
+    }
+
+    pub fun getInt(key: String) Int64!TomlError {
+        var v: Value = self.get(key)?;
+        return v.asInt()?;
+    }
+
+    pub fun getFloat(key: String) Float64!TomlError {
+        var v: Value = self.get(key)?;
+        return v.asFloat()?;
+    }
+
+    pub fun getBool(key: String) Bool!TomlError {
+        var v: Value = self.get(key)?;
+        return v.asBool()?;
+    }
+
+   
+    pub fun seekString(path: String) String!TomlError {
+        var v: Value = self.seek(path)?;
+        return v.asString()?;
+    }
+
+    pub fun seekInt(path: String) Int64!TomlError {
+        var v: Value = self.seek(path)?;
+        return v.asInt()?;
+    }
+
+    pub fun seekFloat(path: String) Float64!TomlError {
+        var v: Value = self.seek(path)?;
+        return v.asFloat()?;
+    }
+
+    pub fun seekBool(path: String) Bool!TomlError {
+        var v: Value = self.seek(path)?;
+        return v.asBool()?;
+    }
+
+    // Number of entries for a table or array; 0 otherwise.
+    pub fun size() Int {
+        var t: Kind = self.kind();
+        unsafe {
+            if t == TABLE {
+                return ffi.zt_table_size(self.handle) as Int;
+            }
+            if t == ARRAY {
+                return ffi.zt_array_size(self.handle) as Int;
+            }
+        }
+        return 0;
+    }
+
+    // The i-th key of a table. Fails with IndexOutOfRange if out of bounds.
+    pub fun keyAt(i: Int) String!TomlError {
+        if i < 0 || i >= self.size() {
+            fail TomlError { kind: ErrorKind.IndexOutOfRange, message: "table key index out of range" };
+        }
+        unsafe {
+            return cstr(ffi.zt_table_key(self.handle, i as Int32));
+        }
+    }
+
+    // The value paired with the i-th key of a table.
+    pub fun valueAt(i: Int) Value!TomlError {
+        if i < 0 || i >= self.size() {
+            fail TomlError { kind: ErrorKind.IndexOutOfRange, message: "table value index out of range" };
+        }
+        unsafe {
+            return new Value(ffi.zt_table_value(self.handle, i as Int32));
+        }
+    }
+
+    //Array access
+    // The i-th element of an array. Fails with IndexOutOfRange if out of bounds.
+    pub fun at(i: Int) Value!TomlError {
+        if i < 0 || i >= self.size() {
+            fail TomlError { kind: ErrorKind.IndexOutOfRange, message: "array index out of range" };
+        }
+        unsafe {
+            return new Value(ffi.zt_array_get(self.handle, i as Int32));
+        }
+    }
+
+    //Datetime components 
+    pub fun year() Int { unsafe { return ffi.zt_ts_year(self.handle) as Int; } }
+    pub fun month() Int { unsafe { return ffi.zt_ts_month(self.handle) as Int; } }
+    pub fun day() Int { unsafe { return ffi.zt_ts_day(self.handle) as Int; } }
+    pub fun hour() Int { unsafe { return ffi.zt_ts_hour(self.handle) as Int; } }
+    pub fun minute() Int { unsafe { return ffi.zt_ts_minute(self.handle) as Int; } }
+    pub fun second() Int { unsafe { return ffi.zt_ts_second(self.handle) as Int; } }
+    pub fun usec() Int { unsafe { return ffi.zt_ts_usec(self.handle) as Int; } }
+    pub fun tz() Int { unsafe { return ffi.zt_ts_tz(self.handle) as Int; } }
+}
+
+
+pub class Document {
+    priv result: *Void;
+
+    fun init(r: *Void) {
+        self.result = r;
+    }
+
+    // The top-level table.
+    pub fun root() Value {
+        unsafe {
+            return new Value(ffi.zt_root(self.result));
+        }
+    }
+
+    // Release the parsed tree. All Values borrowed from it become invalid.
+    pub fun close() {
+        unsafe {
+            ffi.zt_free(self.result);
+        }
+    }
+}
+
+//Entry points
+// Wrap a freshly parsed result, failing (and freeing) if parsing went wrong.
+fun finish(result: *Void) Document!TomlError {
+    unsafe {
+        var okFlag: Int = ffi.zt_ok(result) as Int;
+        if okFlag == 0 {
+            var msg: String = cstr(ffi.zt_errmsg(result));
+            ffi.zt_free(result);
+            fail TomlError { kind: ErrorKind.Parse, message: msg };
+        }
+        return new Document(result);
+    }
+}
+
+// Parse a TOML document from a string. Fails with ErrorKind.Parse on error.
+pub fun parseString(src: String) Document!TomlError {
+    unsafe {
+        return finish(ffi.zt_parse(src as *Char, strlen(src as *Char)))?;
+    }
+}
+
+// Parse a TOML document from a file path. Fails with ErrorKind.Parse on error.
+pub fun parseFile(path: String) Document!TomlError {
+    unsafe {
+        return finish(ffi.zt_parse_file(path as *Char))?;
+    }
+}
