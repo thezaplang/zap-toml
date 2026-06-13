@@ -34,7 +34,7 @@ Errors use Zap's failable functions. Parsing, lookups, and typed accessors
 return `T!toml.TomlError`; propagate with `?` or handle locally with
 `or <fallback>` / `or err { ... }`.
 
-```zap
+```kotlin
 import "std/io" { println, printInt };
 import "toml";
 
