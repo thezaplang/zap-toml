@@ -8,6 +8,12 @@ CC="${CC:-cc}"
 OUT="$DIR/lib"
 mkdir -p "$OUT"
 
+# Ensure the tomlc17 submodule is checked out (empty after a fresh clone).
+if [ ! -f "$DIR/tomlc17/src/tomlc17.c" ]; then
+	echo "Fetching tomlc17 submodule ..."
+	git -C "$DIR" submodule update --init --recursive
+fi
+
 echo "Compiling tomlc17.c ..."
 $CC -O2 -fPIC -I"$DIR/tomlc17/src" -c "$DIR/tomlc17/src/tomlc17.c" -o "$OUT/tomlc17.o"
 
